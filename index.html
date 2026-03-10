@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<title>Sitzplan</title>
+
+<style>
+body{
+  font-family: Arial, Helvetica, sans-serif;
+  padding:20px;
+  max-width:1100px;
+  margin:auto;
+  background:#f2f2f2;
+}
+h1{text-align:center;}
+.controls{margin-bottom:20px;}
+textarea{width:100%; height:140px; font-size:16px; margin-bottom:10px;}
+input{padding:8px; font-size:16px;}
+button{
+  padding:10px 14px; margin:4px; font-size:15px;
+  border-radius:8px; border:none; background:#3a7bd5; color:white; cursor:pointer;
+}
+.room{margin-top:20px;}
+.board{
+  text-align:center; background:#333; color:white; padding:10px;
+  border-radius:6px; margin-bottom:20px; font-weight:bold;
+}
+.board.bottom{margin-top:20px; margin-bottom:0;}
+
+/* Tabelle */
+table{
+  width:100%; border-collapse: separate; border-spacing:6px; table-layout:fixed;
+}
+td{
+  background:white; border:2px solid #333; border-radius:6px;
+  font-weight:bold; text-align:center; vertical-align:middle;
+  height:60px;
+  display:table-cell; /* zwingt in Zelle */
+  font-size:18px;
+}
+
+/* gesperrt */
+.locked{background:#ffd6d6;}
+
+/* Druck */
+@page{size:A4 landscape; margin:10mm;}
+@media print{
+  body{margin:0; padding:0; background:white;}
+  .controls, h1{display:none;}
+  table{
+    width:100%; border-spacing:4mm; table-layout:fixed;
+  }
+  td{
+    width:12.5%; /* exakt 8 Spalten */
+    height:80px;
+    font-size:clamp(10px,2.2vw,22px);
+    text-align:center;
+    vertical-align:middle;
+    border:2px solid black;
+  }
+  .board{font-size:22px; margin-bottom:10mm;}
+  .board.bottom{margin-top:10mm;}
+}
+</style>
+</head>
+<body>
+
+<h1>Sitzplan</h1>
+
+<div class="controls">
+Klasse: <input id="classname" placeholder="z.B. 5a">
+<button onclick="saveClass()">💾 Klasse speichern</button>
+<button onclick="document.getElementById('fileInput').click()">📂 Klasse laden</button>
+<input type="file" id="fileInput" style="display:none" onchange="loadClass(event)">
+<br><br>
+<textarea id="names" placeholder="Ein Name pro Zeile (max. 32)"></textarea>
+<br>
+<button onclick="generate()">Sitzplan erstellen</button>
+<button onclick="toggleView()">Lehrer- / Schüleransicht</button>
+<button onclick="window.print()">PDF / Drucken</button>
+</div>
+
+<div class="room" id="room"></div>
+
+<script>
+let seats=[], locked=[], mirrored=false;
+const cols=8, rows=4, total=32;
+
+function shuffle(a){for(let i=a.length-1;i>0;i--){let j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]];}}
+
+function generate(){
+  let names = document.getElementById("names").value.split("\n").map(n=>n.trim()).filter(n=>n!="");
+  if(names.length>32){alert("Maximal 32 Namen"); return;}
+  shuffle(names);
+  seats = new Array(total).fill(""); locked = new Array(total).fill(false);
+  for(let i=0;i<names.length;i++){seats[i]=names[i];}
+  draw();
+}
+
+function toggleView(){mirrored=!mirrored; draw();}
+
+function draw(){
+  let room=document.getElementById("room"); room.innerHTML="";
+  if(!mirrored){room.innerHTML+=`<div class="board">TAFEL</div>`;}
+  let table=document.createElement("table");
+  for(let r=0;r<rows;r++){
+    let tr=document.createElement("tr");
+    for(let c=0;c<cols;c++){
+      let i=r*cols+c;
+      let index=mirrored? total-1-i : i;
+      let td=document.createElement("td");
+      td.textContent=seats[index];
+      if(locked[index]) td.classList.add("locked");
+      td.onclick=()=>{locked[index]=!locked[index]; draw();}
+      td.draggable=true;
+      td.ondragstart=e=>{e.dataTransfer.setData("seat",index);}
+      td.ondragover=e=>e.preventDefault();
+      td.ondrop=e=>{
+        let from=e.dataTransfer.getData("seat");
+        let temp=seats[from]; seats[from]=seats[index]; seats[index]=temp;
+        draw();
+      }
+      tr.appendChild(td);
+    }
+    table.appendChild(tr);
+  }
+  room.appendChild(table);
+  if(mirrored){room.innerHTML+=`<div class="board bottom">TAFEL</div>`;}
+}
+
+function saveClass(){
+  let classname=document.getElementById("classname").value || "klasse";
+  let names=document.getElementById("names").value;
+  let data={klasse:classname, namen:names};
+  let blob=new Blob([JSON.stringify(data)],{type:"application/json"});
+  let a=document.createElement("a");
+  a.href=URL.createObjectURL(blob);
+  a.download=classname+"_sitzplan.json";
+  a.click();
+}
+
+function loadClass(event){
+  let file=event.target.files[0]; if(!file) return;
+  let reader=new FileReader();
+  reader.onload=function(e){
+    let data=JSON.parse(e.target.result);
+    document.getElementById("classname").value=data.klasse;
+    document.getElementById("names").value=data.namen;
+  }
+  reader.readAsText(file);
+}
+</script>
+
+</body>
+</html>
