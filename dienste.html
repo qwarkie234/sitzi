@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<title>Klassendienste</title>
+
+<style>
+body{
+font-family:Arial;
+max-width:900px;
+margin:auto;
+padding:30px;
+background:#f2f2f2;
+text-align:center;
+}
+
+button{
+padding:12px 20px;
+margin:10px;
+font-size:16px;
+border:none;
+border-radius:8px;
+background:#3a7bd5;
+color:white;
+cursor:pointer;
+}
+
+.box{
+background:white;
+border-radius:10px;
+padding:20px;
+margin:20px 0;
+font-size:20px;
+font-weight:bold;
+}
+
+select{
+margin-top:10px;
+font-size:16px;
+padding:4px;
+}
+
+table{
+width:100%;
+margin-top:40px;
+border-collapse:collapse;
+}
+
+th,td{
+border:1px solid #555;
+padding:6px;
+}
+
+th{
+background:#ddd;
+}
+</style>
+</head>
+
+<body>
+
+<h1 id="classname"></h1>
+<h2>Klassendienste</h2>
+
+<button onclick="generate()">Neue Woche (Rotation Fairness)</button>
+<button onclick="applyManual()">Manuelle Auswahl übernehmen</button>
+<button onclick="clearStats()">Statistik löschen</button>
+<button onclick="goBack()">Zurück zum Sitzplan</button>
+
+<div class="box">
+Ordnungsdienst 1<br>
+<span id="ord1">-</span><br>
+<select id="sel1"></select>
+</div>
+
+<div class="box">
+Ordnungsdienst 2<br>
+<span id="ord2">-</span><br>
+<select id="sel2"></select>
+</div>
+
+<div class="box">
+Tafeldienst<br>
+<span id="tafel">-</span><br>
+<select id="sel3"></select>
+</div>
+
+<div class="box">
+Blumendienst<br>
+<span id="blumen">-</span><br>
+<select id="sel4"></select>
+</div>
+
+<h2>Dienststatistik</h2>
+<table id="statsTable"></table>
+
+<script>
+let names=[]
+let rotation=[]
+let stats={}
+
+function shuffle(a){
+for(let i=a.length-1;i>0;i--){
+let j=Math.floor(Math.random()*(i+1))
+;[a[i],a[j]]=[a[j],a[i]]
+}
+}
+
+function load(){
+names=localStorage.getItem("schuelerliste")
+.split("\n").map(n=>n.trim()).filter(n=>n!="")
+
+rotation=JSON.parse(localStorage.getItem("rotation")||"[]")
+stats=JSON.parse(localStorage.getItem("stats")||"{}")
+
+document.getElementById("classname").textContent=
+localStorage.getItem("classname")||""
+
+for(let n of names){
+if(!stats[n]){
+stats[n]={ord:0,tafel:0,blumen:0}
+}
+}
+
+fillDropdowns()
+drawStats()
+}
+
+function fillDropdowns(){
+let selects=["sel1","sel2","sel3","sel4"]
+for(let s of selects){
+let sel=document.getElementById(s)
+sel.innerHTML="<option value=''>-- auswählen --</option>"
+for(let n of names){
+let opt=document.createElement("option")
+opt.value=n
+opt.text=n
+sel.appendChild(opt)
+}
+}
+}
+
+function drawStats(){
+let table=document.getElementById("statsTable")
+table.innerHTML="<tr><th>Name</th><th>Ordnungsdienst</th><th>Tafeldienst</th><th>Blumendienst</th><th>Gesamt</th></tr>"
+for(let n of names){
+let s=stats[n]
+let total=s.ord+s.tafel+s.blumen
+table.innerHTML+=`<tr>
+<td>${n}</td><td>${s.ord}</td><td>${s.tafel}</td><td>${s.blumen}</td><td>${total}</td>
+</tr>`
+}
+}
+
+// Fairness-Modus
+function pickFair(role){
+let sorted=names.slice().sort((a,b)=>{
+let totalA=stats[a].ord+stats[a].tafel+stats[a].blumen
+let totalB=stats[b].ord+stats[b].tafel+stats[b].blumen
+return totalA-totalB
+})
+for(let n of sorted){
+if(!role.includes(n)) return n
+}
+return null
+}
+
+function generate(){
+let chosen=[]
+let o1=pickFair(chosen); chosen.push(o1)
+let o2=pickFair(chosen); chosen.push(o2)
+let t=pickFair(chosen); chosen.push(t)
+let b=pickFair(chosen); chosen.push(b)
+assignServices(o1,o2,t,b)
+}
+
+function applyManual(){
+let o1=sel1.value
+let o2=sel2.value
+let t=sel3.value
+let b=sel4.value
+
+let chosen=[o1,o2,t,b].filter(n=>n!="")
+let unique=[...new Set(chosen)]
+if(unique.length!==chosen.length){
+alert("Ein Schüler kann nicht zwei Dienste gleichzeitig haben")
+return
+}
+
+assignServices(o1,o2,t,b)
+}
+
+function assignServices(o1,o2,t,b){
+ord1.textContent=o1||"-"
+ord2.textContent=o2||"-"
+tafel.textContent=t||"-"
+blumen.textContent=b||"-"
+
+if(o1) stats[o1].ord++
+if(o2) stats[o2].ord++
+if(t) stats[t].tafel++
+if(b) stats[b].blumen++
+
+localStorage.setItem("rotation",JSON.stringify(rotation))
+localStorage.setItem("stats",JSON.stringify(stats))
+
+drawStats()
+}
+
+// Statistik löschen
+function clearStats(){
+if(confirm("Alle Dienstzahlen wirklich löschen?")){
+for(let n of names){
+stats[n]={ord:0,tafel:0,blumen:0}
+}
+localStorage.setItem("stats",JSON.stringify(stats))
+drawStats()
+}
+}
+
+function goBack(){
+window.location.href="index.html"
+}
+
+load()
+</script>
+
+</body>
+</html>
