@@ -49,11 +49,17 @@ border-collapse:collapse;
 th,td{
 border:1px solid #555;
 padding:6px;
+text-align:center;
 }
 
 th{
 background:#ddd;
 }
+
+td[contenteditable="true"]{
+background:#eef;
+}
+
 </style>
 </head>
 
@@ -62,9 +68,10 @@ background:#ddd;
 <h1 id="classname"></h1>
 <h2>Klassendienste</h2>
 
-<button onclick="generate()">Neue Woche (Rotation Fairness)</button>
+<button onclick="generate()">Neue Woche (zufällig)</button>
 <button onclick="applyManual()">Manuelle Auswahl übernehmen</button>
 <button onclick="clearStats()">Statistik löschen</button>
+<button onclick="saveStats()">Statistik speichern</button>
 <button onclick="goBack()">Zurück zum Sitzplan</button>
 
 <div class="box">
@@ -92,6 +99,7 @@ Blumendienst<br>
 </div>
 
 <h2>Dienststatistik</h2>
+<p>Direkt in der Tabelle Werte editieren. Enter oder Tab speichert automatisch.</p>
 <table id="statsTable"></table>
 
 <script>
@@ -108,7 +116,9 @@ let j=Math.floor(Math.random()*(i+1))
 
 function load(){
 names=localStorage.getItem("schuelerliste")
-.split("\n").map(n=>n.trim()).filter(n=>n!="")
+.split("\n")
+.map(n=>n.trim())
+.filter(n=>n!="")
 
 rotation=JSON.parse(localStorage.getItem("rotation")||"[]")
 stats=JSON.parse(localStorage.getItem("stats")||"{}")
@@ -140,29 +150,62 @@ sel.appendChild(opt)
 }
 }
 
+// Tabelle zeichnen, contenteditable
 function drawStats(){
 let table=document.getElementById("statsTable")
 table.innerHTML="<tr><th>Name</th><th>Ordnungsdienst</th><th>Tafeldienst</th><th>Blumendienst</th><th>Gesamt</th></tr>"
+
 for(let n of names){
 let s=stats[n]
 let total=s.ord+s.tafel+s.blumen
-table.innerHTML+=`<tr>
-<td>${n}</td><td>${s.ord}</td><td>${s.tafel}</td><td>${s.blumen}</td><td>${total}</td>
+table.innerHTML+=`
+<tr>
+<td>${n}</td>
+<td contenteditable="true" data-name="${n}" data-role="ord">${s.ord}</td>
+<td contenteditable="true" data-name="${n}" data-role="tafel">${s.tafel}</td>
+<td contenteditable="true" data-name="${n}" data-role="blumen">${s.blumen}</td>
+<td>${total}</td>
 </tr>`
+}
+
+// Eventlistener für direkte Bearbeitung
+let cells = table.querySelectorAll('td[contenteditable="true"]')
+cells.forEach(cell=>{
+cell.addEventListener('input',()=>{
+let n = cell.dataset.name
+let role = cell.dataset.role
+let val = parseInt(cell.textContent)
+if(isNaN(val) || val<0){val=0; cell.textContent="0"}
+stats[n][role]=val
+updateTotals()
+localStorage.setItem("stats",JSON.stringify(stats))
+})
+})
+}
+
+function updateTotals(){
+let table=document.getElementById("statsTable")
+for(let r=1;r<table.rows.length;r++){
+let cells=table.rows[r].cells
+let n=cells[0].textContent
+let total = stats[n].ord+stats[n].tafel+stats[n].blumen
+cells[4].textContent=total
 }
 }
 
-// Fairness-Modus
-function pickFair(role){
-let sorted=names.slice().sort((a,b)=>{
-let totalA=stats[a].ord+stats[a].tafel+stats[a].blumen
-let totalB=stats[b].ord+stats[b].tafel+stats[b].blumen
-return totalA-totalB
-})
-for(let n of sorted){
-if(!role.includes(n)) return n
+// Fairness-Modus: Zufall unter Schülern mit wenigsten Diensten
+function pickFair(chosen){
+let totals = names.map(n => ({
+name: n,
+total: stats[n].ord + stats[n].tafel + stats[n].blumen
+}))
+let min = Math.min(...totals.map(t => t.total))
+let candidates = totals.filter(t => t.total===min).map(t=>t.name).filter(n=>!chosen.includes(n))
+if(candidates.length===0){
+candidates = names.filter(n=>!chosen.includes(n))
 }
-return null
+let random = candidates[Math.floor(Math.random()*candidates.length)]
+return random
 }
 
 function generate(){
@@ -207,7 +250,6 @@ localStorage.setItem("stats",JSON.stringify(stats))
 drawStats()
 }
 
-// Statistik löschen
 function clearStats(){
 if(confirm("Alle Dienstzahlen wirklich löschen?")){
 for(let n of names){
@@ -216,6 +258,11 @@ stats[n]={ord:0,tafel:0,blumen:0}
 localStorage.setItem("stats",JSON.stringify(stats))
 drawStats()
 }
+}
+
+function saveStats(){
+localStorage.setItem("stats",JSON.stringify(stats))
+alert("Statistik gespeichert")
 }
 
 function goBack(){
