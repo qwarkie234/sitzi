@@ -7,9 +7,9 @@
 <style>
 body{
 font-family:Arial;
-padding:20px;
 max-width:1100px;
 margin:auto;
+padding:20px;
 background:#f2f2f2;
 }
 
@@ -17,22 +17,20 @@ h1{text-align:center;}
 
 input,textarea{
 width:100%;
-font-size:16px;
 margin-bottom:10px;
 padding:6px;
+font-size:16px;
 }
 
 textarea{height:140px;}
 
 button{
-padding:10px 14px;
 margin:4px;
-font-size:15px;
-border-radius:8px;
+padding:10px;
 border:none;
+border-radius:8px;
 background:#3a7bd5;
 color:white;
-cursor:pointer;
 }
 
 .board{
@@ -41,31 +39,25 @@ background:#333;
 color:white;
 padding:10px;
 border-radius:6px;
-margin-bottom:20px;
-font-weight:bold;
-}
-
-.board.bottom{
-margin-top:20px;
+margin-bottom:10px;
 }
 
 table{
 width:100%;
-border-collapse:separate;
 border-spacing:4px;
 table-layout:fixed;
 }
 
 td{
-background:white;
 border:2px solid #333;
-border-radius:6px;
-text-align:center;
-vertical-align:middle;
 height:60px;
+text-align:center;
 font-weight:bold;
+background:white;
+cursor:grab;
 }
 
+/* 🖨️ DRUCK FIX */
 @page{
 size:A4 landscape;
 margin:10mm;
@@ -73,7 +65,23 @@ margin:10mm;
 
 @media print{
 
-textarea,button,input{display:none;}
+body{
+background:white;
+margin:0;
+padding:0;
+}
+
+input,textarea,button,h1{
+display:none;
+}
+
+.board{
+margin:5mm 0;
+}
+
+table{
+width:100%;
+}
 
 td{
 height:80px;
@@ -88,56 +96,70 @@ font-size:clamp(12px,2vw,22px);
 
 <h1>Sitzplan</h1>
 
-<input id="classname" placeholder="Klassenname (z.B. 5a)">
+<input id="classname" placeholder="Klassenname">
 <textarea id="names" placeholder="Ein Name pro Zeile"></textarea>
 
 <button onclick="generate()">Sitzplan erstellen</button>
 <button onclick="toggleView()">Lehrer-/Schüleransicht</button>
 <button onclick="window.print()">Drucken</button>
 <button onclick="openServices()">Klassendienste</button>
-<button onclick="saveClass()">Klasse speichern</button>
-<button onclick="loadFile()">Klasse laden</button>
 
+<button onclick="saveFile()">Speichern</button>
+<button onclick="loadFile()">Laden</button>
 <input type="file" id="fileInput" style="display:none">
 
 <div id="room"></div>
 
 <script>
-const cols=8
-const rows=4
-const total=32
 
+const cols=8, rows=4, total=32
 let seats=[]
 let mirrored=false
-let rotation=[]
-let lastServices={}
-let stats={}
+let dragged=null
 
-function shuffle(a){
-for(let i=a.length-1;i>0;i--){
-let j=Math.floor(Math.random()*(i+1))
-;[a[i],a[j]]=[a[j],a[i]]
+function getData(){
+return {
+klasse:classname.value,
+namen:names.value,
+seats:seats,
+stats:JSON.parse(localStorage.getItem("stats")||"{}"),
+history:JSON.parse(localStorage.getItem("history")||"[]")
 }
+}
+
+function setData(data){
+classname.value=data.klasse||""
+names.value=data.namen||""
+seats=data.seats||[]
+localStorage.setItem("stats",JSON.stringify(data.stats||{}))
+localStorage.setItem("history",JSON.stringify(data.history||[]))
+if(seats.length>0) draw()
+}
+
+function saveFile(){
+let blob=new Blob([JSON.stringify(getData(),null,2)],{type:"application/json"})
+let a=document.createElement("a")
+a.href=URL.createObjectURL(blob)
+a.download=(classname.value||"klasse")+".json"
+a.click()
+}
+
+function loadFile(){
+let input=document.getElementById("fileInput")
+input.onchange=function(){
+let reader=new FileReader()
+reader.onload=e=>setData(JSON.parse(e.target.result))
+reader.readAsText(input.files[0])
+}
+input.click()
 }
 
 function generate(){
-let names=document.getElementById("names").value
-.split("\n")
-.map(n=>n.trim())
-.filter(n=>n!="")
-
-shuffle(names)
-
+let arr=names.value.split("\n").map(n=>n.trim()).filter(n=>n)
+arr.sort(()=>Math.random()-0.5)
 seats=new Array(total).fill("")
-
-for(let i=0;i<names.length;i++){
-seats[i]=names[i]
-}
-
+arr.forEach((n,i)=>seats[i]=n)
 draw()
-
-localStorage.setItem("schuelerliste",names.join("\n"))
-localStorage.setItem("classname",document.getElementById("classname").value)
 }
 
 function toggleView(){
@@ -146,84 +168,55 @@ draw()
 }
 
 function draw(){
-let room=document.getElementById("room")
-room.innerHTML=""
 
-if(!mirrored){
-room.innerHTML+=`<div class="board">TAFEL</div>`
-}
+room.innerHTML=""
+if(!mirrored) room.innerHTML+=`<div class="board">TAFEL</div>`
 
 let table=document.createElement("table")
 
 for(let r=0;r<rows;r++){
 let tr=document.createElement("tr")
+
 for(let c=0;c<cols;c++){
+
 let i=r*cols+c
 let index=mirrored ? total-1-i : i
+
 let td=document.createElement("td")
 td.textContent=seats[index]||""
+td.draggable=true
+
+td.ondragstart=()=>dragged=index
+td.ondragover=e=>e.preventDefault()
+
+td.ondrop=()=>{
+let tmp=seats[index]
+seats[index]=seats[dragged]
+seats[dragged]=tmp
+draw()
+}
+
 tr.appendChild(td)
 }
+
 table.appendChild(tr)
 }
 
 room.appendChild(table)
 
-if(mirrored){
-room.innerHTML+=`<div class="board bottom">TAFEL</div>`
-}
+if(mirrored) room.innerHTML+=`<div class="board">TAFEL</div>`
 }
 
 function openServices(){
-localStorage.setItem("schuelerliste",document.getElementById("names").value)
-localStorage.setItem("classname",document.getElementById("classname").value)
-localStorage.setItem("rotation",JSON.stringify(rotation))
-localStorage.setItem("stats",JSON.stringify(stats))
+localStorage.setItem("tempData",JSON.stringify(getData()))
 window.location.href="dienste.html"
 }
 
-function saveClass(){
-let data={
-klasse:document.getElementById("classname").value,
-namen:document.getElementById("names").value,
-rotation:rotation,
-lastServices:lastServices,
-stats:stats
-}
-
-let blob=new Blob([JSON.stringify(data,null,2)],{type:"application/json"})
-let a=document.createElement("a")
-a.href=URL.createObjectURL(blob)
-a.download=(document.getElementById("classname").value||"klasse")+".json"
-a.click()
-}
-
-function loadFile(){
-let input=document.getElementById("fileInput")
-input.onchange=function(){
-let file=input.files[0]
-let reader=new FileReader()
-reader.onload=function(e){
-let data=JSON.parse(e.target.result)
-document.getElementById("classname").value=data.klasse||""
-document.getElementById("names").value=data.namen||""
-rotation=data.rotation||[]
-lastServices=data.lastServices||{}
-stats=data.stats||{}
-localStorage.setItem("schuelerliste",document.getElementById("names").value)
-localStorage.setItem("classname",document.getElementById("classname").value)
-}
-reader.readAsText(file)
-}
-input.click()
-}
-
 window.onload=function(){
-let saved=localStorage.getItem("schuelerliste")
-let cname=localStorage.getItem("classname")
-if(saved) document.getElementById("names").value=saved
-if(cname) document.getElementById("classname").value=cname
+let data=localStorage.getItem("tempData")
+if(data) setData(JSON.parse(data))
 }
+
 </script>
 
 </body>
